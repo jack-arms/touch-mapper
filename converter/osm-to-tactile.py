@@ -6,7 +6,7 @@ import os
 import subprocess
 import json
 
-script_dir = os.path.dirname(os.path.realpath(__file__))
+script_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
 def do_cmdline():
     parser = argparse.ArgumentParser(description='''Convert .osm file into a tactile map. Writes one or more .stl files in thee input file's directory.''')
@@ -33,6 +33,7 @@ def subprocess_output(cmd, env=None):
         raise e
 
 def run_osm2world(input_path, output_path, scale, exclude_buildings):
+    print(script_dir)
     osm2world_path = os.path.join(script_dir, 'OSM2World', 'build', 'OSM2World.jar')
     #print(osm2world_path + " " + input_path + " " + output_path)
     cmd = [

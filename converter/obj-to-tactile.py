@@ -1,3 +1,5 @@
+#!/usr/bin/python3 -u
+
 from __future__ import print_function
 import sys
 import argparse
@@ -35,14 +37,9 @@ def warning(*objs):
 
 def do_cmdline():
     parser = argparse.ArgumentParser(description='''Read an OSM map as a .obj file, modify it to a tactile map, and export as .stl''')
-    parser.add_argument('--min-x', metavar='FLOAT', type=float, help='minimum X bound')
-    parser.add_argument('--min-y', metavar='FLOAT', type=float, help='minimum Y bound')
-    parser.add_argument('--max-x', metavar='FLOAT', type=float, help='maximum X bound')
-    parser.add_argument('--max-y', metavar='FLOAT', type=float, help='maximum Y bound')
     parser.add_argument('--no-stl-export', action='store_true', help='do not export to .stl file')
     parser.add_argument('--scale', metavar='N', type=int, help="scale to export STL in, 4000 would mean one Blender unit (meter) = 0.25mm (STL file unit is normally mm)")
     parser.add_argument('--marker1', metavar='MARKER', help="first marker's position relative to top left corner")
-    parser.add_argument('--diameter', metavar='METERS', type=int, help="larger of map area x and y diameter in meters")
     parser.add_argument('--size', metavar='METERS', type=float, help="print size in cm")
     parser.add_argument('--no-borders', action='store_true', help="don't draw borders around the edges")
     parser.add_argument('obj_paths', metavar='PATHS', nargs='+', help='.obj files to use as input')
@@ -128,6 +125,7 @@ def add_road_overlay_object(dwg, main_g, ob):
             add_polygons(dwg, g, ob)
 
 def export_svg(base_path, args):
+    return
     t = time.clock()
     min_x, min_y, max_x, max_y = (args.min_x, args.min_y, args.max_x, args.max_y)
     one_cm_units = (max_y - min_y) / args.size
@@ -292,7 +290,7 @@ def remove_everything():
 # Import given file as .obj and return it
 def import_obj_file(obj_path):
     t = time.clock()
-    bpy.ops.import_scene.obj(filepath=obj_path, axis_forward='-Z', axis_up='Y')
+    bpy.ops.import_scene.obj(filepath=obj_path, axis_forward='X', axis_up='Z')
     print("importing STL took " + (str(time.clock() - t)))
 
 # Extrude floor to a flat-roofed building
@@ -720,7 +718,11 @@ def process_objects(min_x, min_y, max_x, max_y, scale, no_borders):
 
 def make_tactile_map(args):
     t = time.clock()
-    min_x, min_y, max_x, max_y = (args.min_x, args.min_y, args.max_x, args.max_y)
+    bpy.ops.object.select_all(action='SELECT')
+    bpy.ops.object.transform_apply(rotation=True)
+    bpy.context.scene.update()
+    min_x, min_y, max_x, max_y = get_scene_bounding_box()
+    print('min x: {0}, min y: {1}, max_x: {2}, max_y: {3}'.format(min_x, min_y, max_x, max_y))
 
     process_objects(min_x, min_y, max_x, max_y, args.scale, args.no_borders)
     print("process_objects() took " + (str(time.clock() - t)))
@@ -733,6 +735,15 @@ def make_tactile_map(args):
         add_marker1(args, args.scale)
 
     return base_cube
+
+def get_scene_bounding_box():
+    obj_dimens = [x.dimensions for x in bpy.context.scene.objects]
+    min_x = min(obj_dimens, key=lambda x:x[0])[0]
+    min_y = min(obj_dimens, key=lambda x:x[1])[1]
+    max_x = max(obj_dimens, key=lambda x:x[0])[0]
+    max_y = max(obj_dimens, key=lambda x:x[1])[1]
+
+    return min_x, min_y, max_x, max_y
 
 def main():
     args = do_cmdline()
