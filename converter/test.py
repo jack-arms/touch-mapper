@@ -1,11 +1,12 @@
 import bpy
+import bmesh
 from mathutils import Vector
 import math
 
 ROAD_HEIGHT_CAR_MM = 0.82 # 3 x 0.25-0.3mm layers
 ROAD_HEIGHT_PEDESTRIAN_MM = 1.5
 BUILDING_HEIGHT_MM = 2.9
-BASE_HEIGHT_MM = 0.6
+BASE_HEIGHT_MM = 10
 BASE_OVERLAP_MM = 0.01
 WATER_AREA_DEPTH_MM = 1.5
 WATER_WAVE_DISTANCE_MM = 10.3
@@ -83,11 +84,93 @@ def import_obj_file(obj_path):
     bpy.ops.import_scene.obj(filepath=obj_path, axis_forward='X', axis_up='Y')
 
 def export_blend_file(blend_path):
-    bpy.ops.object.select_all(action='SELECT') # it's handy to have everything selected initially
+    # bpy.ops.object.select_all(action='SELECT') # it's handy to have everything selected initially
     bpy.ops.wm.save_as_mainfile(filepath=blend_path, check_existing=False, compress=True)
 
+def depress_buildings(base):
+    z_max_base = max(v.co[2] for v in base.data.vertices)
+    bpy.ops.object.mode_set(mode = 'OBJECT')
+    bpy.ops.object.select_all(action='DESELECT')
+    buildings = [o for o in bpy.context.scene.objects if o.name.startswith('Building')]
+    for building in buildings:
+        # remove faces
+        bpy.ops.object.mode_set(mode = 'OBJECT')
+        bpy.ops.object.select_all(action='DESELECT')
+        print(building)
+        building.select = True
+        bpy.context.scene.objects.active = building
+        bpy.ops.object.mode_set(mode = 'EDIT')
+        bpy.ops.mesh.dissolve_limited()
+        bpy.ops.mesh.delete(type='ONLY_FACE')
+        building.select = False
+        print("removed.")
+
+        bpy.ops.object.mode_set(mode = 'OBJECT')
+        bpy.ops.object.select_all(action='DESELECT')
+
+        # identify base vertices
+        def is_base_vertex(z_min, vertex):
+            return abs(vertex.co[2] - z_min) < 0.1
+
+        vertices = building.data.vertices
+        z_min = min(v.co[2] for v in vertices)
+        base_vertices = [v for v in vertices if is_base_vertex(z_min, v)]
+        other_vertices = [v for v in vertices if not is_base_vertex(z_min, v)]
+
+        # remove all other vertices
+        sel_mode = bpy.context.tool_settings.mesh_select_mode
+        bpy.context.tool_settings.mesh_select_mode = [True, False, False]
+        bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+
+        for v in other_vertices:
+            v.select = True
+            
+        bpy.ops.object.mode_set(mode='EDIT', toggle=False)
+        bpy.ops.mesh.delete(type='VERT')
+
+        building.location += Vector((0, 0, 5))
+
+        print('extruding')
+
+        # extrude building down
+        bpy.ops.object.mode_set(mode = 'OBJECT')
+        bpy.ops.object.select_all(action='DESELECT')
+        bpy.context.scene.objects.active = building
+        bpy.ops.object.mode_set(mode = 'EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.mesh.extrude_region_move(TRANSFORM_OT_translate={ "value": (0.0, 0.0, -30) })
+
+        bpy.context.tool_settings.mesh_select_mode = sel_mode
+
+        bpy.ops.object.mode_set(mode = 'OBJECT')
+        bpy.ops.object.select_all(action='DESELECT')
+
+        # # cut vertices into base
+        # bpy.context.scene.objects.active = base
+        # base.select = True
+        # bpy.ops.object.mode_set(mode = 'EDIT')
+        # bm = bmesh.from_edit_mesh(base.data)
+        # for v in base_vertices:
+        #     print("new VERTEX")
+        #     bm.verts.new((v.co[0], v.co[1], z_max_base))
+        # bmesh.update_edit_mesh(base.data)
+
+        # # join building to base
+        # bpy.ops.object.mode_set(mode = 'OBJECT')
+        # bpy.ops.object.select_all(action='DESELECT')
+        # bpy.context.scene.objects.active = base
+        # base.select = True
+        # building.select = True
+        # bpy.ops.object.join()
+
+        # bpy.ops.object.mode_set(mode = 'EDIT')
+        # bpy.ops.mesh.intersect()       
+        # building.select = False
+        # base.select = False 
+        # bpy.context.scene.objects.active = base
+
 scale = 1000
-obj_path = "/Users/jackarms/Desktop/touch-mapper/OSM2World/build/map2.obj"
+obj_path = "map2.obj"
 import_obj_file(obj_path)
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.object.transform_apply(rotation=True)
@@ -102,4 +185,5 @@ base_cube = create_cube(min_x, min_y, max_x, max_y, -base_height + overlap, over
 base_cube.name = 'Base'
 print(box)
 
-export_blend_file("/Users/jackarms/Desktop/touch-mapper/OSM2World/build/map2.blend")
+depress_buildings(base_cube)
+export_blend_file("map_out.blend")
