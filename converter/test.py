@@ -22,7 +22,7 @@ def get_obj_bounds(obj):
     if not hasattr(me, 'vertices') or len(me.vertices) == 0:
         print(obj.name)
         return obj.location[0], obj.location[1], obj.location[0], obj.location[1]
-    
+
     verts_sel = [v.co for v in me.vertices]
     # print("vertices: ", verts_sel)
     min_obj_x = min(verts_sel, key=lambda x:x[0])[0]
@@ -91,7 +91,8 @@ def depress_buildings(base):
     z_max_base = max(v.co[2] for v in base.data.vertices)
     bpy.ops.object.mode_set(mode = 'OBJECT')
     bpy.ops.object.select_all(action='DESELECT')
-    buildings = [o for o in bpy.context.scene.objects if o.name.startswith('Building')]
+    buildings = [o for o in bpy.context.scene.objects if o.name.startswith('Building') and 'Entrance' not in o.name]
+    building_bases = {b.name: None for b in buildings}
     for building in buildings:
         # remove faces
         bpy.ops.object.mode_set(mode = 'OBJECT')
@@ -117,6 +118,8 @@ def depress_buildings(base):
         base_vertices = [v for v in vertices if is_base_vertex(z_min, v)]
         other_vertices = [v for v in vertices if not is_base_vertex(z_min, v)]
 
+        building_bases[building.name] = [(v.co[0], v.co[1], v.co[2]) for v in base_vertices]
+
         # remove all other vertices
         sel_mode = bpy.context.tool_settings.mesh_select_mode
         bpy.context.tool_settings.mesh_select_mode = [True, False, False]
@@ -124,7 +127,7 @@ def depress_buildings(base):
 
         for v in other_vertices:
             v.select = True
-            
+
         bpy.ops.object.mode_set(mode='EDIT', toggle=False)
         bpy.ops.mesh.delete(type='VERT')
 
@@ -138,22 +141,42 @@ def depress_buildings(base):
         bpy.context.scene.objects.active = building
         bpy.ops.object.mode_set(mode = 'EDIT')
         bpy.ops.mesh.select_all(action='SELECT')
-        bpy.ops.mesh.extrude_region_move(TRANSFORM_OT_translate={ "value": (0.0, 0.0, -30) })
+        bpy.ops.mesh.extrude_region_move(TRANSFORM_OT_translate={ "value": (0.0, 0.0, -(5 + base.dimensions[2])) })
 
         bpy.context.tool_settings.mesh_select_mode = sel_mode
 
         bpy.ops.object.mode_set(mode = 'OBJECT')
         bpy.ops.object.select_all(action='DESELECT')
 
-        # # cut vertices into base
+        # cut vertices into base
         # bpy.context.scene.objects.active = base
-        # base.select = True
         # bpy.ops.object.mode_set(mode = 'EDIT')
+
+        # bm = bmesh.new()
+        # bm.from_mesh(base.data)
+        # bpy.ops.object.mode_set(mode='OBJECT')
+        # for v in base_vertices_copy:
+        #     print("Base vertex: {0}".format(v))
+        #     new_vertex = (v[0], v[1], z_max_base)
+        #     print("new vertex in base: {0}".format(str(new_vertex)))
+        #     bm.verts.new(new_vertex)
+        # # bmesh.update_edit_mesh(base.data)
+        # bm.to_mesh(base.data)
+        # bm.free()
+
         # bm = bmesh.from_edit_mesh(base.data)
-        # for v in base_vertices:
-        #     print("new VERTEX")
-        #     bm.verts.new((v.co[0], v.co[1], z_max_base))
-        # bmesh.update_edit_mesh(base.data)
+        # face_verts = [bm.verts.new(v) for v in base_vertices_copy]
+        # face = bm.faces.new(face_verts)
+        # bpy.ops.object.mode_set(mode='OBJECT')
+
+        # for v in base_vertices_copy:
+        #     print("Base vertex: {0}".format(v))
+        #     new_vertex = (v[0], v[1], z_max_base)
+        #     print("new vertex in base: {0}".format(str(new_vertex)))
+        #     bm.verts.new(new_vertex)
+        # # bmesh.update_edit_mesh(base.data)
+        # bm.to_mesh(base.data)
+        # bm.free()
 
         # # join building to base
         # bpy.ops.object.mode_set(mode = 'OBJECT')
@@ -164,10 +187,75 @@ def depress_buildings(base):
         # bpy.ops.object.join()
 
         # bpy.ops.object.mode_set(mode = 'EDIT')
-        # bpy.ops.mesh.intersect()       
+        # bpy.ops.mesh.intersect()
         # building.select = False
-        # base.select = False 
+        # base.select = False
         # bpy.context.scene.objects.active = base
+
+    # join all buildings to base
+    bpy.ops.object.mode_set(mode = 'OBJECT')
+    bpy.ops.object.select_all(action='DESELECT')
+    base.select = True
+    bpy.context.scene.objects.active = base
+    for b in buildings:
+        b.select = True
+    bpy.ops.object.join()
+
+    bpy.context.scene.objects.active = base
+    bpy.ops.object.mode_set(mode = 'EDIT')
+    bpy.ops.mesh.intersect()
+    bpy.ops.mesh.select_mode(type="VERT")
+    bpy.ops.mesh.select_all(action = 'DESELECT')
+
+    bpy.ops.object.mode_set(mode = 'OBJECT')
+
+    # bpy.context.tool_settings.mesh_select_mode = [True, False, False]
+    # remove vertices above base
+    for v in base.data.vertices:
+        if v.co[2] > 4:
+            v.select = True
+    bpy.ops.object.mode_set(mode = 'EDIT')
+    bpy.ops.mesh.delete(type='VERT')
+    # bpy.context.tool_settings.mesh_select_mode = sel_mode
+
+    for name,base_vertices in building_bases.items():
+        print(">>>", name, "base vertices")
+        for v in base_vertices:
+            print(v)
+
+    # delete faces of building outlines
+    def get_building_face(face_verts, building_bases):
+        # do all vertices of a face lie on the same building base?
+        for name,base_verts in building_bases.items():
+            # print("Building faces: ", base_verts)
+            # print("Candidate verts: ", face_verts)
+            if len(face_verts) > len(base_verts):
+                continue
+            matches = 0
+            for f in face_verts:
+                match = False
+                for b in base_verts:
+                    if abs(f[0] - b[0]) < 0.0001 and abs(f[1] - b[1]) < 0.0001 and abs(f[2] - b[2]) < 1:
+                        match = True
+                if match:
+                    matches += 1
+            if matches == len(face_verts):
+                print("MATCH: ", name)
+                # for v in base_verts:
+                #     print(v)
+                return name
+        return None
+
+    bpy.ops.object.mode_set(mode = 'OBJECT')
+    bpy.context.tool_settings.mesh_select_mode = [False, False, True]
+    for f in base.data.polygons:
+        face_verts = [base.data.vertices[i].co for i in f.vertices]
+        building = get_building_face(face_verts, building_bases)
+        if building is not None:
+            f.select = True
+
+    bpy.ops.object.mode_set(mode = 'EDIT')
+    bpy.ops.mesh.delete(type='ONLY_FACE')
 
 scale = 1000
 obj_path = "map2.obj"
@@ -183,6 +271,8 @@ base_height = BASE_HEIGHT_MM * mm_to_units
 overlap = BASE_OVERLAP_MM * mm_to_units # move cube this much up so that it overlaps enough with objects they merge into one object
 base_cube = create_cube(min_x, min_y, max_x, max_y, -base_height + overlap, overlap)
 base_cube.name = 'Base'
+bpy.ops.object.select_all(action='SELECT')
+bpy.ops.object.transform_apply(location=True, scale=True)
 print(box)
 
 depress_buildings(base_cube)
